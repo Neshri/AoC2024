@@ -1,3 +1,4 @@
+import time
 from collections import deque
 
 def get_shortest_path(start, end, corruptions):
@@ -21,7 +22,7 @@ def get_shortest_path(start, end, corruptions):
                 visited.add((nx, ny))
                 
     return -1  # no path found
-
+start_time = time.perf_counter()
 with open("day18.txt") as f:
     data = [x.strip() for x in f.readlines()]
 for i in range(len(data)):
@@ -43,3 +44,5 @@ for i in range(1024, len(data)):
     if sp == -1:
         print("The second answer is:", str(data[i][0])+","+str(data[i][1]))
         break
+
+print("Execution time:", "{:.3f}".format(time.perf_counter()-start_time), "seconds")
