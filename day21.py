@@ -1,4 +1,5 @@
-
+from itertools import pairwise
+import time
 KEYPAD = [
     ["7", "8", "9"],
     ["4", "5", "6"],
@@ -30,94 +31,61 @@ D_PAD_MAP = {
     "A": (0, 2)
 }
 
-def is_valid_path(y1, x1, y2, x2, keypad):
-    """
-    Check if a direct path between two points is valid (no gaps).
 
-    Args:
-        y1, x1, y2, x2 (int): Start and target coordinates.
-        keypad (list): 2D list representing the keypad layout.
+def find_shortest_path_length(code, depth):
+    """Calculate exact path length through all keypad layers"""
+    sequence_cache = {}
+    
+    def get_shortest_sequence_length(moves, remaining_depth):
+        cache_key = (moves, remaining_depth)
+        if cache_key in sequence_cache:
+            return sequence_cache[cache_key]
+        if remaining_depth == 0:
+            return len(moves)
+        total_cost = 0
+        for c1, c2 in pairwise(f"A{moves}"):
+            from_pos = D_PAD_MAP[c1]
+            target_pos = D_PAD_MAP[c2]
+            cost = float('inf')
+            for order in ["xy", "yx"]:
+                key = (c1, c2, order, remaining_depth)
+                if key in sequence_cache:
+                    tmp_cost = sequence_cache[key]
+                else:
+                    path = generate_path_with_order(order, from_pos, target_pos, numeric=False)
+                    if path is None:
+                        continue
+                    path += "A"
+                    tmp_cost = get_shortest_sequence_length(path, remaining_depth-1)
+                    sequence_cache[key] = tmp_cost
+                if tmp_cost < cost:
+                    cost = tmp_cost
+            total_cost += cost
+            
+        return total_cost
 
-    Returns:
-        bool: True if the path is valid, False otherwise.
-    """
-    # Vertical path check
-    if x1 == x2:
-        step = 1 if y1 < y2 else -1
-        for y in range(y1, y2 + step, step):
-            if keypad[y][x1] is None:
-                return False
-        return True
-
-    # Horizontal path check
-    if y1 == y2:
-        step = 1 if x1 < x2 else -1
-        for x in range(x1, x2 + step, step):
-            if keypad[y1][x] is None:
-                return False
-        return True
-
-    return False
-
-def get_shortest_path_recursive(codesequence, pos, index, built_sequence, depth, memory, numeric=True):
-    """
-    Compute the shortest path recursively across multiple keypad layers.
-
-    Args:
-        codesequence (str): Original code sequence to process.
-        index (int): Current position in the codesequence being read.
-        built_sequence (str): Sequence being constructed based on moves.
-        depth (int): Current recursion depth (keypad switches).
-        memory (dict): Memoization dictionary.
-        numeric (bool): Whether the current keypad is numeric or directional.
-
-    Returns:
-        str: Shortest valid sequence of moves across keypads.
-    """
-    # Base case: Finished processing all keypads
-    if depth == 0:
-        return codesequence
-
-    # Memoization key
-    key = (codesequence, depth)
-    if key in memory.keys():
-        return memory[key]
-
-    # Set keypad and map based on numeric flag
-    keypad = KEYPAD if numeric else D_PAD
-    keypad_map = KEYPAD_MAP if numeric else D_PAD_MAP
-
-    # Base case: Reached the end of the current codesequence
-    if index >= len(codesequence):
-        # Recurse to the next depth level with the newly built sequence
-        result = get_shortest_path_recursive(built_sequence, (0, 2), 0, "", depth - 1, memory, numeric=False)
-        memory[key] = result
-        return result
-
-    # Get the current character and position
-    current_char = codesequence[index]
-    current_pos = keypad_map[current_char]
-
-    # Get possible moves (xy and yx paths)
-    shortest_sequence = None
-    for move_order in ["xy", "yx"]:
-        # Generate a valid path for the current move order
-        new_sequence = generate_path_with_order(move_order, pos, current_pos, numeric)
-        if new_sequence is not None:
-            # Recurse with the updated index and sequence
-            result = get_shortest_path_recursive(codesequence, current_pos, index + 1, built_sequence + new_sequence + "A", depth, memory, numeric)
-            # Compare and keep the shortest valid result
-            if shortest_sequence is None or len(result) < len(shortest_sequence):
-                shortest_sequence = result
-    # if index == len(codesequence) - 1:
-    #     # Memoize the completed sequence for this depth
-    #     if key in memory.keys():
-    #         if len(shortest_sequence) < len(memory[key]):
-    #             memory[key] = shortest_sequence
-    #     else:
-    #         memory[key] = shortest_sequence
-    return shortest_sequence
-
+    # Generate initial numeric sequence
+    total_cost = 0
+    for c1, c2 in pairwise(f"A{code}"):
+        from_pos = KEYPAD_MAP[c1]
+        target_pos = KEYPAD_MAP[c2]
+        cost = float('inf')
+        for order in ["xy", "yx"]:
+            key = (c1, c2, order, depth)
+            if key in sequence_cache:
+                tmp_cost = sequence_cache[key]
+            else:    
+                path = generate_path_with_order(order, from_pos, target_pos, numeric=True)
+                if path is None:
+                    continue
+                path += "A"
+                tmp_cost = get_shortest_sequence_length(path, depth-1)
+            if tmp_cost < cost:
+                cost = tmp_cost
+                sequence_cache[key] = cost
+        total_cost += cost
+        from_pos = target_pos
+    return total_cost
 
 def generate_path_with_order(order, start_pos, target_pos, numeric):
     """
@@ -160,7 +128,6 @@ def is_valid_path(y1, x1, y2, x2, keypad):
     """
     Check if the path between two positions is valid.
     """
-    # Same implementation as before
     if x1 == x2:
         step = 1 if y1 < y2 else -1
         for y in range(y1, y2 + step, step):
@@ -199,35 +166,29 @@ def generate_moves(start, end):
     return "".join(moves)
 
 
-
+start_time = time.perf_counter()
 # Input and Keypad definitions
 with open("day21.txt") as f:
     codes = [x.strip() for x in f.readlines()]
-
-
-start_positions = {
-    "numeric": (3, 2),  # Numeric keypad starts at "A"
-    "directional": (0, 2)  # Directional keypads start at "A"
-}
-
 total_complexity = 0
-
-memory = {}
 # Processing codes
 for code in codes:
-    final_path = get_shortest_path_recursive(code, start_positions["numeric"], 0, "", 3, memory, True)
-    final_path_length = len(final_path)
+    final_path_length = find_shortest_path_length(code, 3)
     
     # Calculate complexity
     numeric_part = int(code[:-1])  # Extract numeric part
     complexity = final_path_length * numeric_part
     total_complexity += complexity
-
-    # Debugging output
-    print(f"Code: {code}")
-    print(f"Final directional path ({final_path_length}): {final_path}")
-    print(f"Complexity: {complexity}\n")
-    print(memory[(code, 3)] == final_path)
-
 # Output total complexity
 print("The first answer is:", total_complexity)
+
+total_complexity = 0
+for code in codes:
+    final_path_length = find_shortest_path_length(code, 26)
+    # Calculate complexity
+    numeric_part = int(code[:-1])  # Extract numeric part
+    complexity = final_path_length * numeric_part
+    total_complexity += complexity
+# Output total complexity
+print("The second answer is:", total_complexity)
+print("Execution time:", "{:.3f}".format(time.perf_counter()-start_time), "seconds")
